@@ -1,0 +1,28 @@
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+
+# ビルド・配布関連
+work/
+out/
+*.jar
+
+# データベース・元データ（著作権のあるデータが入っているため、公開しない）
+test.db
+*.db
+*.csv
+
+# 管理者アカウント（ユーザー名・パスワードのハッシュ。各自のパソコンだけに置く）
+admin.properties
+
+# OCRで読み込んだ資料の写真・JSON（著作権のある資料のスキャン画像のため）
+*.jpg
+*.jpeg
+*.png
+!screenshots/*.png
+
+# OS・エディタ
+.DS_Store
+Thumbs.db
