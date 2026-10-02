@@ -1,6 +1,7 @@
 package jp.example;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -27,8 +28,16 @@ import javax.swing.JTextField;
 public class AdminWindow {
 
 
-	/** 「管理者ログイン」ボタンが押されたときに呼ばれる。ログイン画面を開く。 */
+	/**
+	 * 「管理者ログイン」ボタンが押されたときに呼ばれる。
+	 * まだ管理者アカウントが設定されていなければ（初回起動など）、先に初期設定の画面を開く。
+	 */
 	public static void openLogin(Connection connection, JFrame topFrame) {
+		if (!AdminAuth.hasAccount()) {
+			openAccountSetup(connection, topFrame, null);
+			return;
+		}
+
 		JFrame loginFrame = new JFrame("管理者ログイン");
 		loginFrame.setSize(300, 150);
 		loginFrame.setLayout(new java.awt.GridLayout(3, 2, 5, 5));
@@ -48,7 +57,7 @@ public class AdminWindow {
 			String user = userField.getText();
 			String pass = new String(passField.getPassword());
 
-			if (user.equals("admin") && pass.equals("pw")) {
+			if (AdminAuth.authenticate(user, pass)) {
 				loginFrame.dispose();
 				openAdminFrame(connection);
 			} else {
@@ -59,6 +68,94 @@ public class AdminWindow {
 		passField.addActionListener(pv -> loginButton.doClick());
 
 		loginFrame.setVisible(true);
+	}
+
+	/**
+	 * 管理者アカウントの設定画面。
+	 * 初回起動時（まだ何も設定されていないとき）と、「パスワードを変更」から開いたとき（今のパスワードの確認つき）の、
+	 * 両方で使う。requireCurrentPasswordCheckがnullなら初回、そうでなければ変更用。
+	 */
+	private static void openAccountSetup(Connection connection, JFrame topFrame, Runnable requireCurrentPasswordCheck) {
+		boolean firstTime = requireCurrentPasswordCheck == null;
+		JFrame setupFrame = new JFrame(firstTime ? "管理者アカウントの初期設定" : "パスワードを変更");
+		setupFrame.setSize(380, firstTime ? 260 : 300);
+		setupFrame.setLayout(new BoxLayout(setupFrame.getContentPane(), BoxLayout.Y_AXIS));
+
+		JPanel msgPanel = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
+		msgPanel.add(new JLabel(firstTime ? "<html>最初に、管理者のユーザー名とパスワードを<br>決めてください。あとからでも変更できます。</html>"
+				: "<html>新しいユーザー名・パスワードを入力してください。</html>"));
+		setupFrame.add(msgPanel);
+
+		JTextField currentPassField0 = null;
+		if (!firstTime) {
+			JPanel curRow = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
+			curRow.add(new JLabel("今のパスワード："));
+			JPasswordField curPass = new JPasswordField(14);
+			curRow.add(curPass);
+			setupFrame.add(curRow);
+			currentPassField0 = curPass; // 型合わせ用（下のラムダで実体を使う）
+		}
+		final JPasswordField currentPassField = (JPasswordField) currentPassField0;
+
+		JPanel userRow = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
+		userRow.add(new JLabel("　ユーザー名："));
+		JTextField userField = new JTextField(14);
+		userField.setText(firstTime ? "admin" : "");
+		userRow.add(userField);
+		setupFrame.add(userRow);
+
+		JPanel pass1Row = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
+		pass1Row.add(new JLabel("新しいパスワード："));
+		JPasswordField pass1 = new JPasswordField(14);
+		pass1Row.add(pass1);
+		setupFrame.add(pass1Row);
+
+		JPanel pass2Row = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
+		pass2Row.add(new JLabel("パスワード（確認）："));
+		JPasswordField pass2 = new JPasswordField(14);
+		pass2Row.add(pass2);
+		setupFrame.add(pass2Row);
+
+		JButton okButton = new JButton(firstTime ? "この内容で設定する" : "変更する");
+		JPanel okRow = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.CENTER));
+		okRow.add(okButton);
+		setupFrame.add(okRow);
+
+		okButton.addActionListener(ev -> {
+			if (!firstTime) {
+				String cur = new String(currentPassField.getPassword());
+				// 変更前は、必ず「今のユーザー名」でなく、とにかく今のパスワードが合っているかだけ確認する
+				// （ユーザー名を忘れていても、パスワードさえ分かれば変更できるようにするため、保存済みユーザー名を使う）
+				if (!AdminAuth.authenticate(AdminAuth.currentUsernameOrEmpty(), cur)) {
+					JOptionPane.showMessageDialog(setupFrame, "今のパスワードが違います。");
+					return;
+				}
+			}
+			String u = userField.getText().trim();
+			String p1 = new String(pass1.getPassword());
+			String p2 = new String(pass2.getPassword());
+			if (u.isEmpty() || p1.isEmpty()) {
+				JOptionPane.showMessageDialog(setupFrame, "ユーザー名とパスワードを入力してください。");
+				return;
+			}
+			if (!p1.equals(p2)) {
+				JOptionPane.showMessageDialog(setupFrame, "パスワード（確認）が一致しません。");
+				return;
+			}
+			try {
+				AdminAuth.setup(u, p1);
+				JOptionPane.showMessageDialog(setupFrame,
+						firstTime ? "設定しました。このユーザー名とパスワードでログインしてください。" : "パスワードを変更しました。");
+				setupFrame.dispose();
+				if (firstTime) {
+					openLogin(connection, topFrame);
+				}
+			} catch (IOException ex) {
+				JOptionPane.showMessageDialog(setupFrame, "保存できませんでした：" + ex.getMessage());
+			}
+		});
+
+		setupFrame.setVisible(true);
 	}
 
 	/** ログイン成功後の「管理者画面：データ一覧」を開く。 */
@@ -85,11 +182,17 @@ public class AdminWindow {
 		adminSearchRow.add(adminSearchButton);
 		adminSearchButton.addActionListener(asv -> loadAdminList(adminListPanel, connection, adminFrame, adminSearchBox.getText()));
 
+		JButton changePasswordButton = new JButton("パスワードを変更");
+		changePasswordButton.setFont(new java.awt.Font("Dialog", java.awt.Font.PLAIN, 10));
+		changePasswordButton.addActionListener(cpv -> openAccountSetup(connection, null, () -> {
+		}));
+
 		JPanel adminMainPanel = new JPanel();
 		adminMainPanel.setLayout(new BoxLayout(adminMainPanel, BoxLayout.Y_AXIS));
 		adminMainPanel.add(trashButton);
 		adminMainPanel.add(addButton);
 		adminMainPanel.add(exportButton);
+		adminMainPanel.add(changePasswordButton);
 		adminMainPanel.add(adminSearchRow);
 		adminMainPanel.add(new JScrollPane(adminListPanel));
 
