@@ -45,13 +45,15 @@
 
 ## Before → After
 
-| むかしのサイト | 今回作ったアプリ |
+むかしのサイトを、同じデータベースから書き出せる、ブラウザ版のページとして復活させました。
+
+| むかしのサイト | 今回作ったアプリ（ブラウザ版） |
 |---|---|
-| ![旧サイト](screenshots/00_old_site.png) | ![管理画面での編集](screenshots/02_admin_edit.png) |
+| ![旧サイト](screenshots/00_old_site.png) | ![ブラウザ版TOP画面](screenshots/01_browser_version.png) |
 
-ブラウザだけで見られるHTML版も、同じデータベースから書き出せます。
+管理者用の編集画面（アプリ版）では、OP・EDなどの区分に応じて色が自動で変わるなど、入力しやすいように作っています。
 
-![HTML版](screenshots/03_html_export.png)
+![管理画面での編集](screenshots/02_admin_edit.png)
 
 ## 工夫したところ・苦労したところ
 
